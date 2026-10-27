@@ -82,6 +82,36 @@ create trigger trg_players_set_normalized_name
   execute function public.players_set_normalized_name();
 
 -- ============================================================================
+-- Editor-allowlist membership check
+--
+-- SECURITY DEFINER is required here, not just for the RPC public code calls
+-- directly: editor_allowlist has RLS enabled with NO select policy for any
+-- client role (by design — nobody should be able to read it directly). A
+-- plain "exists (select 1 from editor_allowlist where ...)" written inline
+-- inside another table's RLS policy is STILL subject to editor_allowlist's
+-- own RLS when it runs, even nested like that — so it would silently see
+-- zero rows and always evaluate false, locking out every real editor. This
+-- function runs with the definer's privileges instead, which is what
+-- actually lets the lookup see the row. Every policy below calls this
+-- function rather than querying editor_allowlist inline.
+-- ============================================================================
+
+create or replace function public.is_approved_editor()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.editor_allowlist a where a.user_id = auth.uid()
+  );
+$$;
+
+revoke all on function public.is_approved_editor() from public, anon;
+grant execute on function public.is_approved_editor() to authenticated;
+
+-- ============================================================================
 -- Row Level Security
 -- ============================================================================
 
@@ -103,21 +133,15 @@ create policy players_editor_insert
   on public.players
   for insert
   to authenticated
-  with check (exists (
-    select 1 from public.editor_allowlist a where a.user_id = auth.uid()
-  ));
+  with check (public.is_approved_editor());
 
 drop policy if exists players_editor_update on public.players;
 create policy players_editor_update
   on public.players
   for update
   to authenticated
-  using (exists (
-    select 1 from public.editor_allowlist a where a.user_id = auth.uid()
-  ))
-  with check (exists (
-    select 1 from public.editor_allowlist a where a.user_id = auth.uid()
-  ));
+  using (public.is_approved_editor())
+  with check (public.is_approved_editor());
 
 -- No delete policy at all: direct player deletion is intentionally impossible
 -- (players are deactivated, never deleted, per v1 scope).
@@ -136,21 +160,14 @@ create policy point_events_editor_insert
   on public.point_events
   for insert
   to authenticated
-  with check (
-    created_by = auth.uid()
-    and exists (
-      select 1 from public.editor_allowlist a where a.user_id = auth.uid()
-    )
-  );
+  with check (created_by = auth.uid() and public.is_approved_editor());
 
 drop policy if exists point_events_editor_delete on public.point_events;
 create policy point_events_editor_delete
   on public.point_events
   for delete
   to authenticated
-  using (exists (
-    select 1 from public.editor_allowlist a where a.user_id = auth.uid()
-  ));
+  using (public.is_approved_editor());
 
 -- No update policy: point_events rows are immutable once inserted.
 
@@ -160,29 +177,12 @@ create policy point_events_editor_delete
 -- The owner manages this table exclusively via the Supabase dashboard
 -- (table editor or SQL editor), which uses the service role and bypasses RLS.
 -- Ordinary editors get no policy that would let them read or write this
--- table at all — not even their own row — which is why a secure RPC
--- (is_approved_editor, below) is provided for self-membership checks.
+-- table at all — not even their own row — which is why is_approved_editor()
+-- above exists as a security-definer escape hatch for self-checks only.
 
 -- ============================================================================
--- RPCs
+-- Other RPCs
 -- ============================================================================
-
--- Lets a signed-in user check their own editor status without granting
--- any SELECT on editor_allowlist itself.
-create or replace function public.is_approved_editor()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.editor_allowlist a where a.user_id = auth.uid()
-  );
-$$;
-
-revoke all on function public.is_approved_editor() from public, anon;
-grant execute on function public.is_approved_editor() to authenticated;
 
 -- Atomically awards one win event to every active player. Re-checks
 -- allowlist membership itself (never trust the caller's client-side gating).
@@ -195,9 +195,7 @@ as $$
 declare
   affected integer;
 begin
-  if not exists (
-    select 1 from public.editor_allowlist a where a.user_id = auth.uid()
-  ) then
+  if not public.is_approved_editor() then
     raise exception 'not an approved editor';
   end if;
 

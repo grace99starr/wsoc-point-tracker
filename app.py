@@ -24,6 +24,59 @@ MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 st.set_page_config(page_title="Team Points Tracker", page_icon="⚽", layout="centered")
 
 
+def _inject_theme_css() -> None:
+    st.markdown(
+        """
+        <style>
+        .wsoc-header {
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+            background: linear-gradient(135deg, #C8102E 0%, #6E0E1F 100%);
+            color: #FFFFFF;
+            padding: 1.1rem 1.4rem;
+            border-radius: 0.6rem;
+            margin-bottom: 1rem;
+        }
+        .wsoc-header .wsoc-titles { display: flex; flex-direction: column; line-height: 1.2; }
+        .wsoc-header .wsoc-title { font-size: 1.6rem; font-weight: 700; }
+        .wsoc-header .wsoc-subtitle { font-size: 0.85rem; opacity: 0.85; }
+
+        .wsoc-badge {
+            display: inline-block;
+            background: #C8102E;
+            color: #FFFFFF;
+            padding: 0.2rem 0.65rem;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        div[data-testid="stMetric"] {
+            background: #F1F2F3;
+            border: 1px solid #D9D9D9;
+            border-radius: 0.5rem;
+            padding: 0.6rem 0.8rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_header() -> None:
+    _inject_theme_css()
+    header_html = (
+        '<div class="wsoc-header">'
+        + '<div class="wsoc-titles">'
+        + '<span class="wsoc-title">Team Points Tracker</span>'
+        + f'<span class="wsoc-subtitle">{SEASON_SUBTITLE}</span>'
+        + "</div></div>"
+    )
+    st.markdown(header_html, unsafe_allow_html=True)
+
+
 def _flash(kind: str, message: str) -> None:
     st.session_state["_flash"] = (kind, message)
 
@@ -92,7 +145,7 @@ def render_player_card(player: dict, is_editor: bool) -> None:
     with st.container(border=True):
         name_col, total_col = st.columns([3, 1])
         name_col.markdown(f"**{player['name']}**")
-        total_col.markdown(f"**{player['total']} pts**")
+        total_col.markdown(f"<span class='wsoc-badge'>{player['total']} pts</span>", unsafe_allow_html=True)
 
         cols = st.columns(3)
         for col, (category, label, field) in zip(cols, CATEGORY_LABELS):
@@ -261,10 +314,7 @@ def _safe(name: str) -> str:
 
 def main() -> None:
     _render_flash()
-
-    st.title("⚽ Team Points Tracker")
-    st.caption(SEASON_SUBTITLE)
-
+    render_header()
     render_sidebar()
     is_editor = auth.is_approved_editor()
 
