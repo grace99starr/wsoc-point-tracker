@@ -34,7 +34,14 @@ def _get_secret(key: str) -> str | None:
         value = st.secrets.get(key)
     except Exception:
         value = None
-    return value or os.environ.get(key)
+    value = value or os.environ.get(key)
+    if not value:
+        return None
+    # Supabase URLs and anon keys are always plain ASCII. Strip anything else
+    # defensively — e.g. smart quotes or other invisible characters a web
+    # form's autocorrect can introduce when a secret is pasted in — rather
+    # than fail deep inside httpx with a cryptic UnicodeEncodeError.
+    return value.strip().encode("ascii", "ignore").decode("ascii") or None
 
 
 def get_client() -> Client:
