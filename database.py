@@ -156,6 +156,59 @@ def delete_latest_point_event(player_id: str, category: str) -> bool:
     return delete_point_event_by_id(latest.data[0]["id"])
 
 
+def count_point_events(player_id: str, category: str) -> int:
+    client = get_client()
+    try:
+        response = (
+            client.table("point_events")
+            .select("id", count="exact")
+            .eq("player_id", player_id)
+            .eq("category", category)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise DatabaseError(_friendly_db_error(exc)) from exc
+    return response.count or 0
+
+
+def insert_point_events(player_id: str, category: str, count: int) -> None:
+    if count <= 0:
+        return
+    client = get_client()
+    rows = [{"player_id": player_id, "category": category} for _ in range(count)]
+    try:
+        client.table("point_events").insert(rows).execute()
+    except Exception as exc:  # noqa: BLE001
+        raise DatabaseError(_friendly_db_error(exc)) from exc
+
+
+def delete_latest_point_events(player_id: str, category: str, count: int) -> int:
+    if count <= 0:
+        return 0
+    client = get_client()
+    try:
+        latest = (
+            client.table("point_events")
+            .select("id")
+            .eq("player_id", player_id)
+            .eq("category", category)
+            .order("created_at", desc=True)
+            .limit(count)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise DatabaseError(_friendly_db_error(exc)) from exc
+
+    ids = [row["id"] for row in latest.data]
+    if not ids:
+        return 0
+    try:
+        response = client.table("point_events").delete().in_("id", ids).execute()
+    except Exception as exc:  # noqa: BLE001
+        raise DatabaseError(_friendly_db_error(exc)) from exc
+    return len(response.data or [])
+
+
 def call_award_team_win() -> int:
     client = get_client()
     try:

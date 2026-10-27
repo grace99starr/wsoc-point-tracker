@@ -105,6 +105,28 @@ def set_player_active(player_id: str, active: bool) -> None:
         _clear_caches()
 
 
+def set_point_count(player_id: str, category: str, target_count: int) -> int:
+    """Reconcile the number of (player_id, category) point_events to
+    target_count by bulk-inserting or bulk-deleting the difference, since
+    points are individual event rows rather than an editable tally.
+    Returns the signed difference actually applied (+n inserted, -n removed).
+    """
+    if category not in VALID_CATEGORIES:
+        raise ValueError(f"Unknown point category: {category}")
+    if target_count < 0:
+        raise ValueError("Point count cannot be negative.")
+    try:
+        current = database.count_point_events(player_id, category)
+        diff = target_count - current
+        if diff > 0:
+            database.insert_point_events(player_id, category, diff)
+        elif diff < 0:
+            database.delete_latest_point_events(player_id, category, -diff)
+        return diff
+    finally:
+        _clear_caches()
+
+
 def award_point(player_id: str, category: str) -> str:
     if category not in VALID_CATEGORIES:
         raise ValueError(f"Unknown point category: {category}")

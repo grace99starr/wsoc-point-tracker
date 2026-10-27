@@ -175,8 +175,25 @@ def render_player_card(player: dict, is_editor: bool) -> None:
         for col, (category, label, field) in zip(cols, CATEGORY_LABELS):
             with col:
                 st.caption(label)
-                st.markdown(f"#### {player[field]}")
                 if is_editor:
+                    count_key = f"count_{player['id']}_{category}"
+                    typed_value = st.number_input(
+                        label,
+                        min_value=0,
+                        step=1,
+                        value=player[field],
+                        key=count_key,
+                        label_visibility="collapsed",
+                    )
+                    if int(typed_value) != player[field]:
+                        _run_mutation(
+                            points.set_point_count,
+                            player["id"],
+                            category,
+                            int(typed_value),
+                            success_message=f"{label} count updated for {player['name']}.",
+                        )
+
                     plus_col, minus_col = st.columns(2)
                     if plus_col.button("➕", key=f"plus_{player['id']}_{category}", use_container_width=True):
                         _run_mutation(
@@ -197,6 +214,8 @@ def render_player_card(player: dict, is_editor: bool) -> None:
                             category,
                             success_message=f"Last {label.lower()} undone for {player['name']}.",
                         )
+                else:
+                    st.markdown(f"#### {player[field]}")
 
 
 def render_players_tab(is_editor: bool) -> None:

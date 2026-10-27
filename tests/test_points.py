@@ -68,3 +68,45 @@ def test_add_player_rejects_empty_name():
     except ValueError:
         return
     assert False, "expected ValueError for an empty player name"
+
+
+def test_set_point_count_rejects_invalid_category():
+    try:
+        points.set_point_count("some-player-id", "red-card", 3)
+    except ValueError:
+        return
+    assert False, "expected ValueError for an invalid point category"
+
+
+def test_set_point_count_rejects_negative_target():
+    try:
+        points.set_point_count("some-player-id", "win", -1)
+    except ValueError:
+        return
+    assert False, "expected ValueError for a negative target count"
+
+
+def test_set_point_count_inserts_difference_when_increasing(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(points.database, "count_point_events", lambda player_id, category: 2)
+    monkeypatch.setattr(
+        points.database,
+        "insert_point_events",
+        lambda player_id, category, count: calls.update(inserted=count),
+    )
+    diff = points.set_point_count("player-1", "goal", 5)
+    assert diff == 3
+    assert calls["inserted"] == 3
+
+
+def test_set_point_count_deletes_difference_when_decreasing(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(points.database, "count_point_events", lambda player_id, category: 5)
+    monkeypatch.setattr(
+        points.database,
+        "delete_latest_point_events",
+        lambda player_id, category, count: calls.update(deleted=count),
+    )
+    diff = points.set_point_count("player-1", "goal", 2)
+    assert diff == -3
+    assert calls["deleted"] == 3
