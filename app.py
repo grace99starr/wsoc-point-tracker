@@ -23,6 +23,30 @@ MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 st.set_page_config(page_title="Team Points Tracker", page_icon="⚽", layout="centered")
 
+# --- TEMPORARY DIAGNOSTIC: remove once the secrets encoding issue is found ---
+if st.query_params.get("debug_secrets") == "1":
+    import os
+
+    st.title("Secrets diagnostic")
+    for key in ("SUPABASE_URL", "SUPABASE_ANON_KEY"):
+        st.subheader(key)
+        try:
+            raw = st.secrets.get(key)
+        except Exception as exc:  # noqa: BLE001
+            st.write(f"st.secrets raised: {exc!r}")
+            raw = None
+        if raw is None:
+            st.write("st.secrets.get() -> None")
+        else:
+            st.write(f"type={type(raw).__name__}  len={len(raw)}  isascii={raw.isascii()}")
+            bad = [(i, repr(c), hex(ord(c))) for i, c in enumerate(raw) if ord(c) > 127]
+            st.write(f"non-ascii chars (index, char, codepoint): {bad}")
+            st.code(repr(raw))
+        env_val = os.environ.get(key)
+        st.write(f"os.environ -> {env_val!r}")
+    st.stop()
+# --- END TEMPORARY DIAGNOSTIC ---
+
 
 def _inject_theme_css() -> None:
     st.markdown(
