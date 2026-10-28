@@ -38,7 +38,11 @@ def sign_out() -> None:
         client.auth.sign_out()
     except Exception:  # noqa: BLE001 - sign-out is best-effort cleanup
         pass
-    client.postgrest.auth(None)
+    # postgrest's .auth(None) raises (it requires an actual token or
+    # basic-auth credentials) rather than clearing the header, so instead
+    # drop the cached client entirely — the next get_client() call builds a
+    # brand new anonymous one with no leftover Authorization header at all.
+    st.session_state.pop("_sb_client", None)
     for key in ("auth_user_id", "auth_email", "is_editor_cache"):
         st.session_state.pop(key, None)
 

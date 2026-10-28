@@ -195,7 +195,7 @@ def render_player_card(player: dict, is_editor: bool) -> None:
                         )
 
                     plus_col, minus_col = st.columns(2)
-                    if plus_col.button("➕", key=f"plus_{player['id']}_{category}", use_container_width=True):
+                    if plus_col.button("➕", key=f"plus_{player['id']}_{category}", width="stretch"):
                         _run_mutation(
                             points.award_point,
                             player["id"],
@@ -205,7 +205,7 @@ def render_player_card(player: dict, is_editor: bool) -> None:
                     if minus_col.button(
                         "➖",
                         key=f"minus_{player['id']}_{category}",
-                        use_container_width=True,
+                        width="stretch",
                         disabled=player[field] == 0,
                     ):
                         _run_mutation(
@@ -276,7 +276,7 @@ def render_leaderboard_tab() -> None:
             for r in rows
         ]
 
-    st.dataframe(table, hide_index=True, use_container_width=True)
+    st.dataframe(table, hide_index=True, width="stretch")
 
 
 def render_manage_tab() -> None:
