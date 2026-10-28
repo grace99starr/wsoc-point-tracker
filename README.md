@@ -76,6 +76,15 @@ hardcode it in source either.
 **Settings → Secrets** box (same TOML syntax as above) instead of uploading
 a file.
 
+> **Gotcha:** once a secret is saved, Streamlit Cloud redisplays it masked
+> (e.g. `eyJhbGci••••••••`) when you reopen the Secrets box. If you click in
+> and paste/type without first selecting everything (Cmd/Ctrl+A) and
+> deleting it, you can end up saving those literal bullet characters as the
+> "secret" instead of the real value — the app will then fail with a
+> confusing `UnicodeEncodeError` deep in an HTTP library, not an obvious
+> "bad secret" message. Always clear the box completely before re-entering
+> a value.
+
 Never put a Supabase **service role** key anywhere in this app. It bypasses
 RLS entirely, which would defeat the whole point of this setup.
 
@@ -95,13 +104,20 @@ from step 3 to see the Manage Team tab appear.
 ## 6. Deploy to Streamlit Community Cloud
 
 1. Push this repo to GitHub (see note on git below if you're unsure how).
+   **Note:** the free Community Cloud tier only deploys from a **public**
+   GitHub repo — there's no way around this without a paid Streamlit plan
+   or a different host. See "A note on repo visibility" below for what
+   that does and doesn't expose.
 2. Go to [share.streamlit.io](https://share.streamlit.io), sign in, and
    click **New app**.
 3. Point it at your GitHub repo, branch `master` (or `main`), and
    `app.py` as the entry point.
 4. Add your secrets under **Advanced settings → Secrets** before (or right
-   after) the first deploy.
-5. Deploy. Future pushes to the branch auto-redeploy.
+   after) the first deploy — see the gotcha above if you ever edit them
+   later.
+5. Deploy. Future pushes to the branch auto-redeploy (sometimes only a
+   script-level hot-reload; if a deploy seems to not take effect, use
+   **⋮ menu → Reboot app** to force a full restart).
 
 ## 7. Share it
 
@@ -109,6 +125,20 @@ The deployed URL is public and read-only for anyone who opens it — no
 account needed. Share it with the team. Only share editor
 email/password credentials with people you actually want able to edit,
 and only after adding them to `editor_allowlist` (step 3).
+
+### A note on repo visibility
+
+Because the GitHub repo is public (required by Community Cloud's free
+tier — see step 6), the deployed app's **GitHub icon** lets anyone view
+the full source code and the repo owner's GitHub profile. This is safe:
+no credentials are committed (`secrets.toml` is gitignored; only a
+placeholder example file is tracked), and seeing the RLS policy source
+doesn't help anyone bypass it — the database enforces those policies
+regardless of who can read them. The anon key itself isn't a privileged
+credential either (it's sent to every visitor's browser already). If you'd
+rather the code and your GitHub username not be publicly browsable at all,
+that requires a paid Streamlit plan or a different host that supports
+deploying from a private repo.
 
 ## 8. Backing up / exporting data
 
@@ -198,12 +228,22 @@ wsoc-point-tracker/
 │   ├── test_search.py
 │   └── test_authorization.py
 ├── .streamlit/
+│   ├── config.toml           # theme colors (red/black/white/grey)
 │   └── secrets.toml.example
 ├── requirements.txt
 ├── pytest.ini
 ├── .gitignore
 └── README.md
 ```
+
+## Customizing
+
+- **Title / season label:** `SEASON_SUBTITLE` near the top of `app.py`
+  (the "⚽ Team Points Tracker" title itself is in `render_header()`).
+- **Colors:** `.streamlit/config.toml` sets Streamlit's own widget theme
+  (buttons, tabs, inputs); `_inject_theme_css()` in `app.py` sets the
+  header banner, point badges, and metric card styling. Currently red/
+  black/white/grey.
 
 ## Known v1 limitations
 
