@@ -26,7 +26,7 @@ def test_leaderboard_overall_order_and_ties(monkeypatch):
         ("Alex", 1),
         ("Bea", 1),
         ("Cy", 1),
-        ("Dee", 4),
+        ("Dee", 2),
     ]
 
 
@@ -34,7 +34,7 @@ def test_leaderboard_category_view_ranks_by_that_category(monkeypatch):
     _patch_totals(monkeypatch, SAMPLE_ROWS)
     board = points.get_leaderboard("win")
     assert [p["name"] for p in board] == ["Alex", "Bea", "Cy", "Dee"]
-    assert [p["rank"] for p in board] == [1, 2, 2, 4]
+    assert [p["rank"] for p in board] == [1, 2, 2, 3]
 
 
 def test_leaderboard_rejects_unknown_category(monkeypatch):

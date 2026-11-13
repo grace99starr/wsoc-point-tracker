@@ -53,18 +53,19 @@ def _clear_caches() -> None:
     get_recent_activity.clear()
 
 
-def _competition_rank(sorted_items: list[dict], value_key: str) -> list[tuple[int, dict]]:
-    """Standard competition ranking: ties share a rank, the next distinct
-    value jumps to the count of players ranked so far plus one (1, 1, 3)."""
+def _dense_rank(sorted_items: list[dict], value_key: str) -> list[tuple[int, dict]]:
+    """Dense ranking: ties share a rank, and the next distinct value is
+    simply the next number — no gap for however many were tied (1, 1, 2),
+    unlike standard competition ranking (1, 1, 3)."""
     ranked = []
+    rank = 0
     prev_value = None
-    prev_rank = 0
-    for idx, item in enumerate(sorted_items, start=1):
+    for item in sorted_items:
         value = item[value_key]
         if value != prev_value:
-            prev_rank = idx
+            rank += 1
             prev_value = value
-        ranked.append((prev_rank, item))
+        ranked.append((rank, item))
     return ranked
 
 
@@ -75,7 +76,7 @@ def get_leaderboard(category: str) -> list[dict]:
     value_key = _LEADERBOARD_VALUE_KEY[category]
     totals = get_player_totals(include_inactive=False)
     ordered = sorted(totals, key=lambda p: (-p[value_key], p["name"].casefold()))
-    return [{"rank": rank, **player} for rank, player in _competition_rank(ordered, value_key)]
+    return [{"rank": rank, **player} for rank, player in _dense_rank(ordered, value_key)]
 
 
 def add_player(name: str) -> str:
