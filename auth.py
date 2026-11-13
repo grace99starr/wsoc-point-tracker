@@ -60,12 +60,23 @@ def restore_session() -> None:
     cookie, if one exists and is still valid. Call once near the top of
     the app, before anything checks is_signed_in()/is_approved_editor().
     """
+    import sys
+
     if is_signed_in():
+        print("[DEBUG] restore_session: already signed in, skipping", file=sys.stderr)
         return
     try:
+        all_cookies = dict(st.context.cookies)
         token = st.context.cookies.get(_REFRESH_COOKIE_NAME)
-    except Exception:  # noqa: BLE001 - cookie access should never crash the app
+    except Exception as exc:  # noqa: BLE001 - cookie access should never crash the app
+        print(f"[DEBUG] restore_session: reading cookies raised {exc!r}", file=sys.stderr)
         token = None
+        all_cookies = None
+    print(
+        f"[DEBUG] restore_session: cookie_keys={list(all_cookies) if all_cookies is not None else None} "
+        f"token_present={bool(token)}",
+        file=sys.stderr,
+    )
     if not token:
         return
 
