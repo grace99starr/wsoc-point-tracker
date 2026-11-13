@@ -8,20 +8,24 @@ is_approved_editor() RPC rather than reading the allowlist directly,
 since ordinary users have no SELECT grant on it at all).
 
 Staying signed in across visits is layered on top of that: a Supabase
-refresh token is persisted in a browser cookie (via a tiny injected
-script — no extra dependency) so restore_session() can silently rebuild
-a session on a later visit without the user retyping credentials. That
-cookie is a real bearer credential for the lifetime it's valid, same
-tradeoff as any "remember me" feature — anyone with access to that
-specific browser could act as that editor without the password, until
-they log out or the cookie expires/rotates out.
+refresh token is persisted via extra_streamlit_components.CookieManager
+so restore_session() can silently rebuild a session on a later visit
+without the user retyping credentials. A plain injected <script> that
+sets document.cookie directly was tried first, but Streamlit Community
+Cloud's hosting doesn't forward the Cookie header back to the Python
+process at all (confirmed: st.context.cookies came back empty even for
+Streamlit's own session cookies) — CookieManager works around that by
+talking to Python over Streamlit's own component message channel
+instead of relying on the server ever seeing a Cookie header. That
+cookie is still a real bearer credential for as long as it's valid,
+same tradeoff as any "remember me" feature — anyone with access to
+that specific browser could act as that editor without the password,
+until they log out or it expires/rotates out.
 """
 from __future__ import annotations
 
-import json
-
 import streamlit as st
-import streamlit.components.v1 as components
+from extra_streamlit_components import CookieManager
 
 import database
 from database import DatabaseError, get_client
@@ -30,69 +34,27 @@ _REFRESH_COOKIE_NAME = "wsoc_refresh_token"
 _REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 
-def _set_refresh_cookie(token: str) -> None:
-    components.html(
-        f"""
-        <script>
-        const secure = (window.location.protocol === "https:") ? "Secure;" : "";
-        document.cookie = {json.dumps(_REFRESH_COOKIE_NAME)} + "="
-            + encodeURIComponent({json.dumps(token)})
-            + "; path=/; max-age={_REFRESH_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax; " + secure;
-        </script>
-        """,
-        height=0,
-    )
-
-
-def _clear_refresh_cookie() -> None:
-    components.html(
-        f"""
-        <script>
-        document.cookie = {json.dumps(_REFRESH_COOKIE_NAME)} + "=; path=/; max-age=0; SameSite=Lax";
-        </script>
-        """,
-        height=0,
-    )
-
-
-def restore_session() -> None:
+def restore_session(cookie_manager: CookieManager) -> None:
     """Silently rebuild a signed-in session from a persisted refresh-token
     cookie, if one exists and is still valid. Call once near the top of
     the app, before anything checks is_signed_in()/is_approved_editor().
     """
-    import sys
-
     if is_signed_in():
-        print("[DEBUG] restore_session: already signed in, skipping", file=sys.stderr)
         return
-    try:
-        all_cookies = dict(st.context.cookies)
-        token = st.context.cookies.get(_REFRESH_COOKIE_NAME)
-    except Exception as exc:  # noqa: BLE001 - cookie access should never crash the app
-        print(f"[DEBUG] restore_session: reading cookies raised {exc!r}", file=sys.stderr)
-        token = None
-        all_cookies = None
-    print(
-        f"[DEBUG] restore_session: cookie_keys={list(all_cookies) if all_cookies is not None else None} "
-        f"token_present={bool(token)}",
-        file=sys.stderr,
-    )
+
+    token = cookie_manager.get(_REFRESH_COOKIE_NAME)
     if not token:
         return
 
     client = get_client()
     try:
         result = client.auth.refresh_session(token)
-    except Exception as exc:  # noqa: BLE001 - expired/revoked/invalid token: fall back to signed-out
-        import sys
-        print(f"[DEBUG] restore_session refresh failed: token_len={len(token)} error={exc!r}", file=sys.stderr)
-        _clear_refresh_cookie()
+    except Exception:  # noqa: BLE001 - expired/revoked/invalid token: fall back to signed-out
+        cookie_manager.delete(_REFRESH_COOKIE_NAME, key="restore_clear_error")
         return
 
     if result.session is None or result.user is None:
-        import sys
-        print(f"[DEBUG] restore_session got empty session/user: {result!r}", file=sys.stderr)
-        _clear_refresh_cookie()
+        cookie_manager.delete(_REFRESH_COOKIE_NAME, key="restore_clear_empty")
         return
 
     client.postgrest.auth(result.session.access_token)
@@ -102,10 +64,16 @@ def restore_session() -> None:
     # Supabase rotates the refresh token on each use — the old cookie value
     # is now invalid, so persist the new one or the next visit's restore
     # attempt will silently fail.
-    _set_refresh_cookie(result.session.refresh_token)
+    cookie_manager.set(
+        _REFRESH_COOKIE_NAME,
+        result.session.refresh_token,
+        key="restore_rotate",
+        max_age=_REFRESH_COOKIE_MAX_AGE_SECONDS,
+        same_site="lax",
+    )
 
 
-def sign_in(email: str, password: str) -> tuple[bool, str]:
+def sign_in(email: str, password: str, cookie_manager: CookieManager) -> tuple[bool, str]:
     client = get_client()
     try:
         result = client.auth.sign_in_with_password({"email": email, "password": password})
@@ -119,11 +87,17 @@ def sign_in(email: str, password: str) -> tuple[bool, str]:
     st.session_state["auth_user_id"] = result.user.id
     st.session_state["auth_email"] = result.user.email
     st.session_state.pop("is_editor_cache", None)
-    _set_refresh_cookie(result.session.refresh_token)
+    cookie_manager.set(
+        _REFRESH_COOKIE_NAME,
+        result.session.refresh_token,
+        key="sign_in_set",
+        max_age=_REFRESH_COOKIE_MAX_AGE_SECONDS,
+        same_site="lax",
+    )
     return True, ""
 
 
-def sign_out() -> None:
+def sign_out(cookie_manager: CookieManager | None = None) -> None:
     client = get_client()
     try:
         client.auth.sign_out()
@@ -136,7 +110,12 @@ def sign_out() -> None:
     st.session_state.pop("_sb_client", None)
     for key in ("auth_user_id", "auth_email", "is_editor_cache"):
         st.session_state.pop(key, None)
-    _clear_refresh_cookie()
+    # cookie_manager is optional: is_approved_editor() calls sign_out() on a
+    # broken session without one in hand. Leaving the cookie in that case is
+    # harmless — it's already invalid, so the next visit's restore_session()
+    # will fail to refresh it and clean it up itself.
+    if cookie_manager is not None and cookie_manager.get(_REFRESH_COOKIE_NAME):
+        cookie_manager.delete(_REFRESH_COOKIE_NAME, key="sign_out_clear")
 
 
 def is_signed_in() -> bool:

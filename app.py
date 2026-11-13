@@ -12,6 +12,7 @@ import database
 import points
 import streamlit as st
 from database import DatabaseError
+from extra_streamlit_components import CookieManager
 from search import search_players
 
 SEASON_SUBTITLE = "2026 Season"
@@ -111,7 +112,7 @@ def _run_mutation(action, *args, success_message: str | None = None, **kwargs):
     return result
 
 
-def render_sidebar() -> None:
+def render_sidebar(cookie_manager: CookieManager) -> None:
     with st.sidebar:
         st.subheader("Editor")
         if auth.is_signed_in():
@@ -125,7 +126,7 @@ def render_sidebar() -> None:
                     "team owner to add you to the allowlist to edit."
                 )
             if st.button("Log out"):
-                auth.sign_out()
+                auth.sign_out(cookie_manager)
                 st.rerun()
         else:
             st.caption("Editor login")
@@ -134,7 +135,7 @@ def render_sidebar() -> None:
                 password = st.text_input("Password", type="password")
                 submitted = st.form_submit_button("Sign in")
             if submitted:
-                ok, message = auth.sign_in(email, password)
+                ok, message = auth.sign_in(email, password, cookie_manager)
                 if ok:
                     st.rerun()
                 else:
@@ -311,10 +312,11 @@ def _safe(name: str) -> str:
 
 
 def main() -> None:
-    auth.restore_session()
+    cookie_manager = CookieManager()
+    auth.restore_session(cookie_manager)
     _render_flash()
     render_header()
-    render_sidebar()
+    render_sidebar(cookie_manager)
     is_editor = auth.is_approved_editor()
 
     totals = points.get_player_totals()
