@@ -46,22 +46,6 @@ def test_leaderboard_rejects_unknown_category(monkeypatch):
     assert False, "expected ValueError for an unknown category"
 
 
-def test_award_point_rejects_invalid_category():
-    try:
-        points.award_point("some-player-id", "red-card")
-    except ValueError:
-        return
-    assert False, "expected ValueError for an invalid point category"
-
-
-def test_remove_latest_point_rejects_invalid_category():
-    try:
-        points.remove_latest_point("some-player-id", "red-card")
-    except ValueError:
-        return
-    assert False, "expected ValueError for an invalid point category"
-
-
 def test_add_player_rejects_empty_name():
     try:
         points.add_player("   ")

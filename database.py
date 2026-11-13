@@ -114,19 +114,6 @@ def update_player_active(player_id: str, active: bool) -> None:
         raise DatabaseError(_friendly_db_error(exc)) from exc
 
 
-def insert_point_event(player_id: str, category: str) -> str:
-    client = get_client()
-    try:
-        response = (
-            client.table("point_events")
-            .insert({"player_id": player_id, "category": category})
-            .execute()
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise DatabaseError(_friendly_db_error(exc)) from exc
-    return response.data[0]["id"]
-
-
 def delete_point_event_by_id(event_id: str) -> bool:
     client = get_client()
     try:
@@ -134,26 +121,6 @@ def delete_point_event_by_id(event_id: str) -> bool:
     except Exception as exc:  # noqa: BLE001
         raise DatabaseError(_friendly_db_error(exc)) from exc
     return bool(response.data)
-
-
-def delete_latest_point_event(player_id: str, category: str) -> bool:
-    client = get_client()
-    try:
-        latest = (
-            client.table("point_events")
-            .select("id")
-            .eq("player_id", player_id)
-            .eq("category", category)
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise DatabaseError(_friendly_db_error(exc)) from exc
-
-    if not latest.data:
-        return False
-    return delete_point_event_by_id(latest.data[0]["id"])
 
 
 def count_point_events(player_id: str, category: str) -> int:

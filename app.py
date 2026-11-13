@@ -169,27 +169,6 @@ def render_player_card(player: dict, is_editor: bool) -> None:
                             int(typed_value),
                             success_message=f"{label} count updated for {player['name']}.",
                         )
-
-                    plus_col, minus_col = st.columns(2)
-                    if plus_col.button("➕", key=f"plus_{player['id']}_{category}", width="stretch"):
-                        _run_mutation(
-                            points.award_point,
-                            player["id"],
-                            category,
-                            success_message=f"{label} added for {player['name']}.",
-                        )
-                    if minus_col.button(
-                        "➖",
-                        key=f"minus_{player['id']}_{category}",
-                        width="stretch",
-                        disabled=player[field] == 0,
-                    ):
-                        _run_mutation(
-                            points.remove_latest_point,
-                            player["id"],
-                            category,
-                            success_message=f"Last {label.lower()} undone for {player['name']}.",
-                        )
                 else:
                     st.markdown(f"#### {player[field]}")
 

@@ -127,24 +127,6 @@ def set_point_count(player_id: str, category: str, target_count: int) -> int:
         _clear_caches()
 
 
-def award_point(player_id: str, category: str) -> str:
-    if category not in VALID_CATEGORIES:
-        raise ValueError(f"Unknown point category: {category}")
-    try:
-        return database.insert_point_event(player_id, category)
-    finally:
-        _clear_caches()
-
-
-def remove_latest_point(player_id: str, category: str) -> bool:
-    if category not in VALID_CATEGORIES:
-        raise ValueError(f"Unknown point category: {category}")
-    try:
-        return database.delete_latest_point_event(player_id, category)
-    finally:
-        _clear_caches()
-
-
 def delete_point_event(event_id: str) -> bool:
     try:
         return database.delete_point_event_by_id(event_id)
