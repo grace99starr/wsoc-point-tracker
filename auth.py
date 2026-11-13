@@ -72,11 +72,15 @@ def restore_session() -> None:
     client = get_client()
     try:
         result = client.auth.refresh_session(token)
-    except Exception:  # noqa: BLE001 - expired/revoked/invalid token: fall back to signed-out
+    except Exception as exc:  # noqa: BLE001 - expired/revoked/invalid token: fall back to signed-out
+        import sys
+        print(f"[DEBUG] restore_session refresh failed: token_len={len(token)} error={exc!r}", file=sys.stderr)
         _clear_refresh_cookie()
         return
 
     if result.session is None or result.user is None:
+        import sys
+        print(f"[DEBUG] restore_session got empty session/user: {result!r}", file=sys.stderr)
         _clear_refresh_cookie()
         return
 
