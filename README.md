@@ -265,3 +265,9 @@ wsoc-point-tracker/
 - Public refresh is a 30-second cache plus a manual Refresh button, not a
   live push — true real-time would need a polling/websocket component,
   which was left out to keep dependencies minimal.
+- The "Total Points"/"Team Players" metrics row can lag an edit by up to
+  ~15 seconds. Each player card is its own fragment so editing one doesn't
+  reset the page's scroll position, but fragments don't see each other's
+  changes — the metrics row is a separate fragment that just refreshes on
+  its own short timer instead. The edited card itself always updates
+  immediately.
