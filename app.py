@@ -143,6 +143,10 @@ def render_sidebar(cookie_manager: CookieManager) -> None:
 
 
 def render_player_card(player: dict, is_editor: bool) -> None:
+    """Render one player's row. Called fresh on every rerun of the
+    fragment that wraps it (see render_players_tab) — a card can redraw
+    itself after an edit without the rest of the page re-rendering,
+    which is what keeps the browser's scroll position from jumping."""
     with st.container(border=True):
         name_col, total_col = st.columns([3, 1])
         name_col.markdown(f"**{player['name']}**")
@@ -163,15 +167,31 @@ def render_player_card(player: dict, is_editor: bool) -> None:
                         label_visibility="collapsed",
                     )
                     if int(typed_value) != player[field]:
-                        _run_mutation(
-                            points.set_point_count,
-                            player["id"],
-                            category,
-                            int(typed_value),
-                            success_message=f"{label} count updated for {player['name']}.",
-                        )
+                        _apply_point_count_change(player, category, label, int(typed_value))
                 else:
                     st.markdown(f"#### {player[field]}")
+
+
+def _apply_point_count_change(player: dict, category: str, label: str, new_count: int) -> None:
+    """Mutate, give feedback via st.toast (works inside a fragment, unlike
+    the page-level _flash), and rerun — scoped to just this fragment so
+    the rest of the page doesn't redraw, except on an auth failure, which
+    needs a full app rerun since the whole sidebar/editor state changes."""
+    try:
+        points.set_point_count(player["id"], category, new_count)
+    except ValueError as exc:
+        st.toast(str(exc), icon="⚠️")
+        st.rerun(scope="fragment")
+    except DatabaseError as exc:
+        st.toast(str(exc), icon="🚫")
+        if database.is_auth_error(exc):
+            auth.sign_out()
+            st.rerun()
+        else:
+            st.rerun(scope="fragment")
+    else:
+        st.toast(f"{label} count updated for {player['name']}.", icon="✅")
+        st.rerun(scope="fragment")
 
 
 def render_players_tab(is_editor: bool) -> None:
@@ -189,7 +209,18 @@ def render_players_tab(is_editor: bool) -> None:
         st.info(f'No players found matching "{query}".')
     else:
         for player in results:
-            render_player_card(player, is_editor)
+            player_id = player["id"]
+
+            @st.fragment(key=f"player_card_{player_id}")
+            def _card(player_id: str = player_id, is_editor: bool = is_editor) -> None:
+                fresh_totals = points.get_player_totals()
+                fresh_player = next((p for p in fresh_totals if p["id"] == player_id), None)
+                if fresh_player is None:
+                    st.info("This player is no longer active.")
+                    return
+                render_player_card(fresh_player, is_editor)
+
+            _card()
 
     if not is_editor:
         st.caption("Scores update automatically every 30s, or:")
@@ -311,6 +342,20 @@ def _safe(name: str) -> str:
     return name.strip()
 
 
+@st.fragment(run_every="15s")
+def render_metrics() -> None:
+    """Its own fragment so it self-refreshes on a timer. A player-card
+    fragment's edit doesn't trigger this one (fragments don't know about
+    each other), so the totals shown here can lag a mutation by up to the
+    run_every interval — a deliberate tradeoff for not jumping the page."""
+    totals = points.get_player_totals()
+    total_points = sum(p["total"] for p in totals)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Points", total_points)
+    m2.metric("Team Players", len(totals))
+    m3.metric("Categories", 3)
+
+
 def main() -> None:
     cookie_manager = CookieManager()
     auth.restore_session(cookie_manager)
@@ -319,12 +364,7 @@ def main() -> None:
     render_sidebar(cookie_manager)
     is_editor = auth.is_approved_editor()
 
-    totals = points.get_player_totals()
-    total_points = sum(p["total"] for p in totals)
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Points", total_points)
-    m2.metric("Team Players", len(totals))
-    m3.metric("Categories", 3)
+    render_metrics()
 
     tab_labels = ["Players", "Leaderboard"] + (["Manage Team"] if is_editor else [])
     tabs = st.tabs(tab_labels)
