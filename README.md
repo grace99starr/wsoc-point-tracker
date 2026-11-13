@@ -52,6 +52,17 @@ Only you (via the dashboard) can do this. Ordinary editors have no way to
 read or write `editor_allowlist` at all — that's enforced by RLS, not by
 the app hiding a button.
 
+### Staying signed in across visits
+
+Once an editor signs in, the app persists their Supabase refresh token in a
+browser cookie (30-day max-age) and silently restores the session on later
+visits, so they don't have to retype credentials every practice. That
+cookie is a real bearer credential for as long as it's valid — standard
+"remember me" behavior, the same tradeoff any site makes, not a new class
+of risk. Practically: **Log out** clears it immediately, and on a shared
+device (e.g. a tablet at practice) an editor should log out when they're
+done rather than relying on someone else not opening the app.
+
 ## 4. Configure secrets
 
 The app needs two values: your project's URL and its anon/public key.
