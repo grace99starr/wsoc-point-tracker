@@ -311,6 +311,7 @@ def _safe(name: str) -> str:
 
 
 def main() -> None:
+    auth.restore_session()
     _render_flash()
     render_header()
     render_sidebar()
